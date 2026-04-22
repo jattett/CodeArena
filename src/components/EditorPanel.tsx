@@ -10,6 +10,8 @@ interface EditorPanelProps {
   onReset: () => void
   onRun: () => void
   onSubmit: () => void
+  onShowAnswer: () => void
+  hasAnswer: boolean
   running: boolean
 }
 
@@ -21,6 +23,8 @@ export default function EditorPanel({
   onReset,
   onRun,
   onSubmit,
+  onShowAnswer,
+  hasAnswer,
   running,
 }: EditorPanelProps) {
   return (
@@ -46,6 +50,14 @@ export default function EditorPanel({
             title="기본 코드로 초기화"
           >
             ↺ 초기화
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={onShowAnswer}
+            disabled={running || !hasAnswer}
+            title={hasAnswer ? '참조 풀이 열기' : '이 문제에는 참조 풀이가 없습니다'}
+          >
+            💡 답 보기
           </button>
         </div>
         <div className="toolbar-right">

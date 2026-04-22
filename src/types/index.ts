@@ -12,6 +12,20 @@ export interface TestCase {
 
 export type StarterCodes = Record<Language, string>
 
+/**
+ * 문제 해설 / 정답 코드.
+ * 한 문제당 서로 다른 접근의 풀이를 여러 개(1~3개) 저장합니다.
+ * 예: 기본 풀이 / 간결한 풀이 / 최적화 풀이.
+ */
+export type SolutionKind = 'standard' | 'concise' | 'optimized'
+
+export interface Solution {
+  kind: SolutionKind
+  title: string
+  description?: string
+  code: StarterCodes
+}
+
 export interface Problem {
   id: string
   title: string
@@ -19,7 +33,16 @@ export interface Problem {
   description: string
   sampleTests: TestCase[]
   hiddenTests: TestCase[]
+  /**
+   * 에디터에 처음 로드되는 **스켈레톤** 코드.
+   * 정답을 포함하지 않고, 입력 처리 + TODO 주석 수준으로만 구성됩니다.
+   */
   starter: StarterCodes
+  /**
+   * 숨겨진 정답 풀이들. "답 보기" 버튼을 눌러야 공개됩니다.
+   * 비어 있거나 누락되어도 UI는 동작합니다.
+   */
+  solutions?: Solution[]
   source?: ProblemSource
   createdAt?: number
 }

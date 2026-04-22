@@ -5,6 +5,7 @@ import EditorPanel from './components/EditorPanel'
 import ResultPanel from './components/ResultPanel'
 import SettingsModal from './components/SettingsModal'
 import GenerateModal from './components/GenerateModal'
+import SolutionViewer from './components/SolutionViewer'
 import { useRunner } from './hooks/useRunner'
 import { useSettings } from './hooks/useSettings'
 import { useProblems } from './hooks/useProblems'
@@ -69,6 +70,7 @@ export default function App() {
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [generateOpen, setGenerateOpen] = useState(false)
+  const [solutionOpen, setSolutionOpen] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [generateProgress, setGenerateProgress] = useState<{
@@ -282,6 +284,8 @@ export default function App() {
             onReset={handleReset}
             onRun={handleRun}
             onSubmit={handleSubmit}
+            onShowAnswer={() => setSolutionOpen(true)}
+            hasAnswer={!!problem?.solutions && problem.solutions.length > 0}
             running={runner.running}
           />
           <ResultPanel
@@ -319,6 +323,20 @@ export default function App() {
         onOpenSettings={() => {
           setGenerateOpen(false)
           setSettingsOpen(true)
+        }}
+      />
+
+      <SolutionViewer
+        open={solutionOpen}
+        solutions={problem?.solutions}
+        language={language}
+        onClose={() => setSolutionOpen(false)}
+        onApply={(applied, lang) => {
+          if (!problem) return
+          setLanguage(lang)
+          const key = `${problem.id}::${lang}`
+          setCodeMap((prev) => ({ ...prev, [key]: applied }))
+          showToast('참조 풀이를 에디터에 적용했습니다.', 'success')
         }}
       />
 

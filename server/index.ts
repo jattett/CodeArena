@@ -13,7 +13,7 @@ import {
   getToolchainStatus,
   handleLocalRun,
 } from './localExec.js'
-import { CODEX_PROXY_URL, getStatus, startCodexProxy, stopCodexProxy } from './codexProxy.js'
+import { getCodexProxyUrl, getStatus, startCodexProxy, stopCodexProxy } from './codexProxy.js'
 import { loadTokens } from './tokens.js'
 
 const PORT = 1455
@@ -63,7 +63,7 @@ const server = app.listen(PORT, async () => {
   │  Proxy:          POST /api/openai/chat      │
   │  Local runner:   POST /api/run/local        │
   │  Piston proxy:   POST /api/run/piston       │
-  │  Codex upstream: ${CODEX_PROXY_URL}   │
+  │  Codex upstream: ${getCodexProxyUrl()}   │
   └─────────────────────────────────────────────┘
 `
   console.log(banner)

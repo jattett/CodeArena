@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { CODEX_PROXY_URL, isRunning, startCodexProxy } from './codexProxy.js'
+import { getCodexProxyUrl, isRunning, startCodexProxy } from './codexProxy.js'
 import { loadTokens } from './tokens.js'
 
 const OPENAI_CHAT_URL = 'https://api.openai.com/v1/chat/completions'
@@ -64,7 +64,7 @@ export async function handleChatProxy(req: Request, res: Response) {
     }
   }
 
-  return forwardTo(res, `${CODEX_PROXY_URL}/v1/chat/completions`, null, payload, (status, text) => {
+  return forwardTo(res, `${getCodexProxyUrl()}/v1/chat/completions`, null, payload, (status, text) => {
     if (status === 401) return '토큰이 만료됐거나 무효합니다. 로그아웃 후 다시 로그인해주세요.'
     if (status === 403) return 'ChatGPT 계정에 Codex 접근 권한이 없습니다 (Plus/Pro 이상 구독 필요).'
     if (status === 429) return 'Codex 5시간/주간 한도에 도달했습니다. 잠시 후 다시 시도해주세요.'

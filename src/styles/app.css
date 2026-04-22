@@ -1225,3 +1225,195 @@ textarea.text-input {
     max-height: 150px;
   }
 }
+
+/* ---------- Solution Viewer (답 보기 모달) ---------- */
+.solution-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.solution-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-2, #1b1e24);
+  border: 1px solid var(--border);
+  color: var(--text, #e5e7eb);
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 13px;
+}
+.solution-tab:hover {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.08);
+}
+.solution-tab.active {
+  border-color: #6366f1;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(20, 184, 166, 0.08));
+  box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.4);
+}
+.solution-tab .tab-title {
+  font-weight: 500;
+}
+
+.kind-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.kind-badge.kind-standard {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+.kind-badge.kind-concise {
+  background: rgba(20, 184, 166, 0.15);
+  color: #2dd4bf;
+  border: 1px solid rgba(20, 184, 166, 0.35);
+}
+.kind-badge.kind-optimized {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.solution-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.solution-desc {
+  margin: 0;
+  padding: 10px 14px;
+  background: rgba(99, 102, 241, 0.06);
+  border-left: 3px solid #6366f1;
+  border-radius: 0 8px 8px 0;
+  color: var(--text, #e5e7eb);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.solution-lang-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.lang-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.lang-pill {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim, #9ca3af);
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.lang-pill:hover {
+  color: var(--text, #e5e7eb);
+  border-color: #6366f1;
+}
+.lang-pill.active {
+  background: #6366f1;
+  color: white;
+  border-color: #6366f1;
+}
+
+.solution-code-wrap {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.solution-code {
+  transition: filter 0.3s;
+}
+.solution-code.blurred {
+  filter: blur(8px) brightness(0.6);
+  pointer-events: none;
+  user-select: none;
+}
+.reveal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 17, 21, 0.65);
+  backdrop-filter: blur(2px);
+  border: none;
+  color: var(--text, #e5e7eb);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+}
+.reveal-card {
+  text-align: center;
+  padding: 28px 40px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(20, 184, 166, 0.12));
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s;
+}
+.reveal-overlay:hover .reveal-card {
+  transform: scale(1.03);
+  border-color: #6366f1;
+}
+.reveal-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+}
+.reveal-title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.reveal-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim, #9ca3af);
+}
+
+.solution-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.solution-footer .hint-text {
+  font-size: 12px;
+  color: var(--text-dim, #9ca3af);
+}
+.solution-footer .footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.empty-answers {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-dim, #9ca3af);
+}
+.empty-answers p {
+  margin: 6px 0;
+}
+.empty-answers .muted {
+  font-size: 12px;
+  opacity: 0.7;
+}

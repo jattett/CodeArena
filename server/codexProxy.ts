@@ -12,8 +12,19 @@ import { AUTH_FILE } from './tokens.js'
  * - 로그아웃 / refresh 실패 시 정상 종료
  */
 
+/** 초기에 시도하는 포트. 이미 사용 중이면 openai-oauth 가 자동으로 다음 포트로 올라갑니다. */
 export const CODEX_PROXY_PORT = 10531
-export const CODEX_PROXY_URL = `http://127.0.0.1:${CODEX_PROXY_PORT}`
+
+/**
+ * 실제로 openai-oauth 서브프로세스가 바인딩한 URL.
+ * stdout 에서 "ready at http://127.0.0.1:<port>/v1" 을 파싱해 업데이트됩니다.
+ * 외부에서는 {@link getCodexProxyUrl} 로 접근하세요.
+ */
+let currentUrl = `http://127.0.0.1:${CODEX_PROXY_PORT}`
+
+export function getCodexProxyUrl(): string {
+  return currentUrl
+}
 
 let child: ChildProcess | null = null
 let starting = false
@@ -48,7 +59,7 @@ export function getStatus(): { running: boolean; pid: number | null; url: string
   return {
     running: isRunning(),
     pid: child?.pid ?? null,
-    url: CODEX_PROXY_URL,
+    url: currentUrl,
   }
 }
 
@@ -62,8 +73,10 @@ export async function startCodexProxy(): Promise<boolean> {
 
   starting = true
   ready = false
+  // 기동 시마다 기본 URL 로 초기화 (stdout 파싱 시 실제 포트로 갱신됨).
+  currentUrl = `http://127.0.0.1:${CODEX_PROXY_PORT}`
   const cliPath = resolveCliPath()
-  log(`starting openai-oauth on ${CODEX_PROXY_URL} (auth=${AUTH_FILE})`)
+  log(`starting openai-oauth on ${currentUrl} (auth=${AUTH_FILE})`)
 
   try {
     child = spawn(
@@ -95,6 +108,28 @@ export async function startCodexProxy(): Promise<boolean> {
   const onOut = (buf: Buffer) => {
     const s = buf.toString()
     process.stdout.write(`[codex-proxy] ${s}`)
+
+    // openai-oauth 가 실제로 바인딩한 포트를 감지해 URL 을 갱신한다.
+    // 예: "OpenAI-compatible endpoint ready at http://127.0.0.1:10532/v1"
+    //     "Port 10531 was unavailable. Using port 10532 instead."
+    const urlMatch = s.match(/http:\/\/([\d.]+):(\d+)/i)
+    if (urlMatch) {
+      const next = `http://${urlMatch[1]}:${urlMatch[2]}`
+      if (next !== currentUrl) {
+        log(`detected actual proxy url: ${next} (was ${currentUrl})`)
+        currentUrl = next
+      }
+    } else {
+      const portMatch = s.match(/Using port\s+(\d+)/i)
+      if (portMatch) {
+        const next = `http://127.0.0.1:${portMatch[1]}`
+        if (next !== currentUrl) {
+          log(`detected actual proxy port: ${portMatch[1]} (was ${currentUrl})`)
+          currentUrl = next
+        }
+      }
+    }
+
     if (!ready && /ready|listening|http:\/\//i.test(s)) {
       resolveAll(true)
     }
@@ -164,7 +199,7 @@ export async function restartCodexProxy(): Promise<boolean> {
 
 async function pingHealth(): Promise<boolean> {
   try {
-    const r = await fetch(`${CODEX_PROXY_URL}/v1/models`, { method: 'GET' })
+    const r = await fetch(`${currentUrl}/v1/models`, { method: 'GET' })
     return r.status < 500
   } catch {
     return false
