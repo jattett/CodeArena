@@ -1,7 +1,14 @@
-import type { Problem } from '../types'
+import type { Difficulty, Problem } from '../types'
 
 interface ProblemPanelProps {
   problem: Problem | null
+}
+
+const DIFFICULTY_LABEL: Record<Difficulty, string> = {
+  trivial: 'LV.0',
+  easy: 'EASY',
+  medium: 'MEDIUM',
+  hard: 'HARD',
 }
 
 export default function ProblemPanel({ problem }: ProblemPanelProps) {
@@ -21,7 +28,7 @@ export default function ProblemPanel({ problem }: ProblemPanelProps) {
       <div className="problem-head">
         <h2>{problem.title}</h2>
         <span className={`difficulty ${problem.difficulty}`}>
-          {problem.difficulty.toUpperCase()}
+          {DIFFICULTY_LABEL[problem.difficulty]}
         </span>
       </div>
       <div className="problem-description">{problem.description}</div>
