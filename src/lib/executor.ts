@@ -25,31 +25,155 @@ const PISTON_LANG: Record<'java' | 'csharp', string> = {
 
 /* ---------- JavaScript (Web Worker) ---------- */
 
+/**
+ * Web Worker 안에서 실행되는 JavaScript 코드.
+ *
+ * 기본 관례:
+ *   - 전역 'input' 문자열 변수로 stdin 전체가 주입됩니다.
+ *   - console.log 로 출력합니다.
+ *
+ * Node.js 호환 셰임:
+ *   코딩 테스트 사이트(백준/프로그래머스 등)의 관용 문법이 그대로 동작하도록
+ *   다음 API 를 흉내냅니다. (실제 Node.js 와 완전히 동일하지는 않음)
+ *     - require('fs').readFileSync(0, 'utf8') / '/dev/stdin' / '/dev/fd/0'
+ *     - require('readline').createInterface({...}) — 'line' / 'close' 이벤트
+ *     - process.stdin.on('data' | 'end' | 'close', cb)
+ *     - process.stdout.write(s) / process.stderr.write(s)
+ *     - process.argv / process.env / process.exit()
+ */
 const JS_WORKER_SRC = `
 self.onmessage = async (e) => {
   const { code, stdin } = e.data;
   const logs = [];
   const errs = [];
+  const stdoutBuf = [];
+  const stderrBuf = [];
+
   const origLog = console.log;
   const origErr = console.error;
   console.log = (...args) => logs.push(args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '));
   console.error = (...args) => errs.push(args.map(a => String(a)).join(' '));
 
+  const makeWritable = (buf) => ({
+    write: (chunk) => { buf.push(String(chunk)); return true; },
+    end: (chunk) => { if (chunk != null) buf.push(String(chunk)); return true; },
+    on: () => makeWritable(buf),
+    once: () => makeWritable(buf),
+    setDefaultEncoding: () => {},
+  });
+
+  const makeStdin = () => {
+    const listeners = { data: [], end: [], close: [] };
+    let fired = false;
+    const fire = () => {
+      if (fired) return;
+      fired = true;
+      queueMicrotask(() => {
+        listeners.data.forEach(cb => cb(stdin));
+        listeners.end.forEach(cb => cb());
+        listeners.close.forEach(cb => cb());
+      });
+    };
+    const api = {
+      isTTY: false,
+      setEncoding: () => api,
+      resume: () => { fire(); return api; },
+      pause: () => api,
+      read: () => stdin,
+      on: (event, cb) => {
+        if (listeners[event]) listeners[event].push(cb);
+        if (event === 'data') fire();
+        return api;
+      },
+      once: (event, cb) => api.on(event, cb),
+      off: () => api,
+    };
+    return api;
+  };
+
+  const processShim = {
+    stdin: makeStdin(),
+    stdout: makeWritable(stdoutBuf),
+    stderr: makeWritable(stderrBuf),
+    argv: ['node', 'main.js'],
+    env: {},
+    platform: 'browser',
+    exit: (code) => { throw new Error('__PROCESS_EXIT__:' + (code ?? 0)); },
+  };
+
+  const requireShim = (name) => {
+    if (name === 'fs') {
+      return {
+        readFileSync: (pathOrFd) => {
+          if (pathOrFd === 0 || pathOrFd === '/dev/stdin' || pathOrFd === '/dev/fd/0') {
+            return stdin;
+          }
+          throw new Error("브라우저 샌드박스에서는 파일 시스템 접근이 불가합니다: " + pathOrFd);
+        },
+        readFile: (pathOrFd, _encOrCb, maybeCb) => {
+          const cb = typeof _encOrCb === 'function' ? _encOrCb : maybeCb;
+          queueMicrotask(() => cb(null, stdin));
+        },
+      };
+    }
+    if (name === 'readline') {
+      return {
+        createInterface: () => {
+          const lines = stdin.replace(/\\r\\n/g, '\\n').split('\\n');
+          // 관례적으로 trailing '' 는 제거 (코드상 'line' 이벤트로 빈 줄 받는 문제 방지)
+          if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+          const listeners = { line: [], close: [] };
+          const iface = {
+            on: (event, cb) => {
+              if (listeners[event]) listeners[event].push(cb);
+              return iface;
+            },
+            once: (event, cb) => iface.on(event, cb),
+            close: () => listeners.close.forEach(c => c()),
+            question: (_q, cb) => cb(lines.shift() ?? ''),
+          };
+          queueMicrotask(() => {
+            for (const ln of lines) listeners.line.forEach(cb => cb(ln));
+            listeners.close.forEach(cb => cb());
+          });
+          return iface;
+        },
+      };
+    }
+    throw new Error("require('" + name + "') 는 브라우저 샌드박스에서 지원되지 않습니다. 전역 'input' 변수를 사용하세요.");
+  };
+
   const t0 = performance.now();
   try {
-    const fn = new Function('input', \`"use strict"; return (async () => { \${code} })();\`);
-    await fn(stdin);
+    const fn = new Function(
+      'input', 'process', 'require',
+      \`"use strict"; return (async () => { \${code} })();\`
+    );
+    await fn(stdin, processShim, requireShim);
   } catch (err) {
-    errs.push(err && err.stack ? err.stack : String(err));
+    const msg = err && err.message ? String(err.message) : String(err);
+    // process.exit() 호출은 정상 종료로 간주 — stderr 에 남기지 않음.
+    if (!msg.startsWith('__PROCESS_EXIT__:')) {
+      errs.push(err && err.stack ? err.stack : String(err));
+    }
   }
   const t1 = performance.now();
 
   console.log = origLog;
   console.error = origErr;
 
+  // console.log 결과와 process.stdout.write 결과를 합친다.
+  // 보통 사용자는 둘 중 한 가지만 쓰므로 단순 연결로 충분.
+  const stdoutStr = [logs.join('\\n'), stdoutBuf.join('')]
+    .filter(s => s.length > 0)
+    .join('');
+  const stderrStr = [errs.join('\\n'), stderrBuf.join('')]
+    .filter(s => s.length > 0)
+    .join('');
+
   self.postMessage({
-    stdout: logs.join('\\n'),
-    stderr: errs.join('\\n'),
+    stdout: stdoutStr,
+    stderr: stderrStr,
     timeMs: t1 - t0,
     timedOut: false,
   });
