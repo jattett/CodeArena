@@ -60,7 +60,7 @@ const PROBLEM_SCHEMA = {
     required: ['title', 'difficulty', 'description', 'sampleTests', 'hiddenTests', 'starter', 'solutions'],
     properties: {
       title: { type: 'string', description: '한국어로 된 문제 제목 (20자 이내)' },
-      difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
+      difficulty: { type: 'string', enum: ['trivial', 'easy', 'medium', 'hard'] },
       description: {
         type: 'string',
         description: '한국어 문제 설명. 입력/출력 형식과 제약조건을 포함할 것.',
@@ -99,8 +99,13 @@ const SYSTEM_PROMPT = `당신은 **프로그래머스 코딩테스트 Lv.1 ~ Lv.
 주어진 주제/난이도/제약조건에 맞춰 명확하고 정확한 문제를 만드세요.
 
 ## 난이도 기준 (중요)
-실제 난이도는 **국내 신입 개발자 코딩테스트 / 프로그래머스 Lv.1~2 수준**으로 맞춰주세요.
+실제 난이도는 **국내 신입 개발자 코딩테스트 / 프로그래머스 Lv.0~2 수준**으로 맞춰주세요.
 알고리즘 경시대회 / LeetCode Hard 급의 어려운 문제는 출제하지 마세요.
+
+- **trivial (입문, 프로그래머스 Lv.0 / 코딩 입문자 수준)**
+  **한 줄짜리 연산 한두 번이면 끝나는 수준**. 프로그래머스의 "코딩 기초 트레이닝" 수준.
+  반복문조차 거의 필요 없거나 아주 단순한 for 한 개 정도.
+  예: 두 수의 합/차/곱, 숫자의 제곱, 홀짝 판별, 문자열 그대로 출력, 문자열 길이, 리스트 첫/마지막 원소.
 
 - **easy (쉬움, 프로그래머스 Lv.1 수준)**
   문자열 기본 조작, 배열 순회, 단순 수학, 조건문/반복문 연습 수준.
@@ -120,7 +125,7 @@ const SYSTEM_PROMPT = `당신은 **프로그래머스 코딩테스트 Lv.1 ~ Lv.
 
 {
   "title": string,
-  "difficulty": "easy" | "medium" | "hard",
+  "difficulty": "trivial" | "easy" | "medium" | "hard",
   "description": string,
   "sampleTests": [ { "name": string, "stdin": string, "expected": string }, ... ],   // 2~3개
   "hiddenTests": [ { "name": string, "stdin": string, "expected": string }, ... ],   // 요청된 개수
@@ -180,9 +185,12 @@ const SYSTEM_PROMPT = `당신은 **프로그래머스 코딩테스트 Lv.1 ~ Lv.
 - JSON 외 다른 텍스트는 절대 출력하지 마세요.`
 
 function buildUserPrompt(req: GenerateRequest): string {
-  const diffLabel = { easy: '쉬움 (프로그래머스 Lv.1)', medium: '보통 (프로그래머스 Lv.2)', hard: '어려움 (Lv.2 중상)' }[
-    req.difficulty
-  ]
+  const diffLabel = {
+    trivial: '입문 (프로그래머스 Lv.0 · 코딩 기초 트레이닝 수준 · 매우 쉬움)',
+    easy: '쉬움 (프로그래머스 Lv.1)',
+    medium: '보통 (프로그래머스 Lv.2)',
+    hard: '어려움 (Lv.2 중상)',
+  }[req.difficulty]
   return `아래 명세에 맞게 코딩테스트 문제를 1개 만들어주세요.
 
 - 주제: ${req.topic || '(자유 · 문자열/배열/수학/구현 중에서 적절히 선택)'}
@@ -303,6 +311,17 @@ function normalizeSolutions(raw: unknown, fallbackCode: StarterCodes): Solution[
 
 function coerceDifficulty(v: unknown): Difficulty {
   const s = String(v ?? '').trim().toLowerCase()
+  if (
+    s === 'trivial' ||
+    s === '입문' ||
+    s === 'intro' ||
+    s === 'lv0' ||
+    s === 'lv.0' ||
+    s === 'beginner' ||
+    s === 'warmup' ||
+    s === 'very easy'
+  )
+    return 'trivial'
   if (s === 'easy' || s === '쉬움' || s === 'low') return 'easy'
   if (s === 'medium' || s === '보통' || s === 'mid' || s === 'normal') return 'medium'
   if (s === 'hard' || s === '어려움' || s === 'high') return 'hard'

@@ -10,6 +10,7 @@ interface SidebarProps {
 }
 
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {
+  trivial: 'Lv.0',
   easy: 'Easy',
   medium: 'Medium',
   hard: 'Hard',

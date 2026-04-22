@@ -1,6 +1,6 @@
 export type Language = 'javascript' | 'python' | 'java' | 'csharp'
 
-export type Difficulty = 'easy' | 'medium' | 'hard'
+export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard'
 
 export type ProblemSource = 'builtin' | 'ai'
 

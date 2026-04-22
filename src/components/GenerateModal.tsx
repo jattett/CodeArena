@@ -15,9 +15,10 @@ interface Props {
 }
 
 const DIFFICULTIES: Array<{ id: Difficulty; label: string }> = [
-  { id: 'easy', label: '쉬움' },
-  { id: 'medium', label: '보통' },
-  { id: 'hard', label: '어려움' },
+  { id: 'trivial', label: '입문 (Lv.0)' },
+  { id: 'easy', label: '쉬움 (Lv.1)' },
+  { id: 'medium', label: '보통 (Lv.2)' },
+  { id: 'hard', label: '어려움 (Lv.2~3)' },
 ]
 
 const TOPIC_PRESETS = [
