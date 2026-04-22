@@ -8,6 +8,11 @@ import {
 } from './auth.js'
 import { handleChatProxy } from './proxy.js'
 import { handlePistonRun } from './pistonProxy.js'
+import {
+  detectToolchains,
+  getToolchainStatus,
+  handleLocalRun,
+} from './localExec.js'
 import { CODEX_PROXY_URL, getStatus, startCodexProxy, stopCodexProxy } from './codexProxy.js'
 import { loadTokens } from './tokens.js'
 
@@ -32,7 +37,12 @@ app.use(
 app.use(express.json({ limit: '1mb' }))
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, version: '0.3.0', codexProxy: getStatus() })
+  res.json({
+    ok: true,
+    version: '0.4.0',
+    codexProxy: getStatus(),
+    toolchain: getToolchainStatus(),
+  })
 })
 
 app.get('/auth/login', handleLogin)
@@ -40,6 +50,7 @@ app.get('/auth/callback', handleCallback)
 app.get('/api/auth/status', handleStatus)
 app.post('/api/auth/logout', handleLogout)
 app.post('/api/openai/chat', handleChatProxy)
+app.post('/api/run/local', handleLocalRun)
 app.post('/api/run/piston', handlePistonRun)
 
 const server = app.listen(PORT, async () => {
@@ -50,12 +61,20 @@ const server = app.listen(PORT, async () => {
   │                                             │
   │  OAuth callback: /auth/callback             │
   │  Proxy:          POST /api/openai/chat      │
+  │  Local runner:   POST /api/run/local        │
+  │  Piston proxy:   POST /api/run/piston       │
   │  Codex upstream: ${CODEX_PROXY_URL}   │
   └─────────────────────────────────────────────┘
 `
   console.log(banner)
 
-  // 이미 토큰이 있으면 openai-oauth 서브프로세스 자동 기동
+  const tc = await detectToolchains()
+  console.log(
+    `[startup] local toolchains: java=${tc.java.available ? '✓' : '✗'} ${
+      tc.java.path ?? ''
+    } · dotnet=${tc.csharp.available ? '✓' : '✗'} ${tc.csharp.path ?? ''}`,
+  )
+
   const tokens = await loadTokens()
   if (tokens) {
     console.log('[startup] found existing tokens, starting openai-oauth subprocess...')

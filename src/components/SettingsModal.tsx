@@ -10,11 +10,17 @@ import {
 } from '../lib/openai'
 import type { AuthMode, AuthStatus, OpenAISettings } from '../types'
 
+interface ToolchainInfo {
+  java: { available: boolean; path?: string }
+  csharp: { available: boolean; path?: string }
+}
+
 interface Props {
   open: boolean
   settings: OpenAISettings
   authStatus: AuthStatus
   backendOk: boolean
+  toolchain: ToolchainInfo | null
   loginBusy: boolean
   authError: string | null
   onClose: () => void
@@ -29,6 +35,7 @@ export default function SettingsModal({
   settings,
   authStatus,
   backendOk,
+  toolchain,
   loginBusy,
   authError,
   onClose,
@@ -311,10 +318,52 @@ export default function SettingsModal({
 
       <div className="form-row">
         <label className="form-label">
-          Piston URL <span className="badge-sm">Java / C# 실행</span>
+          Java / C# 실행 환경
           <span className="form-hint">
-            emkc.org 공개 API 는 2026-02-15 부터 <b>whitelist 전용</b>으로 변경됐습니다. 자체 호스팅한
-            Piston 엔드포인트를 입력하거나 비워두면 서버 기본값을 사용합니다.
+            로컬 백엔드가 설치된 <code>javac</code> / <code>dotnet</code> 을 자동 감지해
+            사용합니다. 둘 다 없으면 아래 Piston 엔드포인트로 폴백합니다.
+          </span>
+        </label>
+
+        <div className="toolchain-grid">
+          <div className={`toolchain-card ${toolchain?.java.available ? 'ok' : 'off'}`}>
+            <div className="toolchain-head">
+              <span className="toolchain-label">☕ Java</span>
+              <span className="toolchain-status">
+                {toolchain?.java.available ? '✓ 로컬' : '✗ 미설치'}
+              </span>
+            </div>
+            {toolchain?.java.available ? (
+              <code className="toolchain-path">{toolchain.java.path}</code>
+            ) : (
+              <div className="toolchain-hint">
+                <code>brew install openjdk</code> 후 터미널 재시작
+              </div>
+            )}
+          </div>
+
+          <div className={`toolchain-card ${toolchain?.csharp.available ? 'ok' : 'off'}`}>
+            <div className="toolchain-head">
+              <span className="toolchain-label">#️⃣ C# (.NET)</span>
+              <span className="toolchain-status">
+                {toolchain?.csharp.available ? '✓ 로컬' : '✗ 미설치'}
+              </span>
+            </div>
+            {toolchain?.csharp.available ? (
+              <code className="toolchain-path">{toolchain.csharp.path}</code>
+            ) : (
+              <div className="toolchain-hint">
+                <code>brew install --cask dotnet-sdk</code> 후 터미널 재시작
+              </div>
+            )}
+          </div>
+        </div>
+
+        <label className="form-label" style={{ marginTop: 14 }}>
+          Piston URL <span className="badge-sm">폴백 전용</span>
+          <span className="form-hint">
+            로컬 툴체인이 없는 언어는 여기 지정한 Piston 인스턴스로 보내집니다. 비우면 서버
+            기본값(`emkc.org` · 현재 whitelist only). 자체 호스팅 방법은 아래 참고.
           </span>
         </label>
         <input
@@ -332,7 +381,7 @@ export default function SettingsModal({
   -p 2000:2000 \\
   ghcr.io/engineer-man/piston
 
-# 이후 Piston 내부에 언어 런타임 설치 (Java / C# 예시)
+# 내부에 언어 런타임 설치
 docker exec piston piston-cli ppman install java
 docker exec piston piston-cli ppman install csharp
 

@@ -6,10 +6,12 @@ import type { ExecutionResult, Language } from '../types'
  *
  * - JavaScript: Web Worker 샌드박스
  * - Python: Pyodide (브라우저 내 Python 런타임)
- * - Java / C#: 로컬 Express 백엔드의 /api/run/piston 프록시 → Piston 인스턴스
- *   (emkc.org 공개 API 는 2026-02-15 부터 whitelist only. 자체 호스팅 권장.)
+ * - Java / C#: 로컬 Express 백엔드가 순서대로 시도
+ *     1) /api/run/local  — 시스템에 설치된 javac/java/dotnet 직접 실행 (권장)
+ *     2) /api/run/piston — 사용자 지정 Piston 인스턴스 (polling fallback)
  */
 
+const LOCAL_RUN_PATH = '/api/run/local'
 const PISTON_PROXY_PATH = '/api/run/piston'
 
 const PISTON_VERSIONS: Record<'java' | 'csharp', string> = {
@@ -172,6 +174,65 @@ interface PistonProxyErrorBody {
   raw?: string
 }
 
+interface LocalRunResponse {
+  stdout: string
+  stderr: string
+  timeMs: number
+  timedOut: boolean
+}
+
+interface LocalRunError {
+  error?: string
+  hint?: string
+}
+
+/**
+ * 백엔드 로컬 실행 시도. 503 (toolchain 미설치) 이면 null 을 돌려
+ * 상위에서 Piston 으로 폴백할 수 있도록 한다.
+ */
+async function tryRunLocal(
+  language: 'java' | 'csharp',
+  code: string,
+  stdin: string,
+): Promise<ExecutionResult | null> {
+  const t0 = performance.now()
+  let resp: Response
+  try {
+    resp = await fetch(LOCAL_RUN_PATH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language, code, stdin, timeoutMs: 8_000 }),
+    })
+  } catch {
+    // 백엔드 자체가 꺼진 경우 — Piston 폴백도 의미없지만 일단 null 반환
+    return null
+  }
+  if (resp.status === 503) return null
+  if (!resp.ok) {
+    let body: LocalRunError | null = null
+    try {
+      body = (await resp.json()) as LocalRunError
+    } catch {
+      body = { error: await resp.text() }
+    }
+    return {
+      stdout: '',
+      stderr: [body?.error ?? `로컬 실행 오류 (${resp.status})`, body?.hint ?? '']
+        .filter(Boolean)
+        .join('\n'),
+      timeMs: performance.now() - t0,
+      timedOut: false,
+    }
+  }
+  const data = (await resp.json()) as LocalRunResponse
+  return {
+    stdout: data.stdout ?? '',
+    stderr: data.stderr ?? '',
+    timeMs: data.timeMs ?? performance.now() - t0,
+    timedOut: !!data.timedOut,
+  }
+}
+
 async function runPiston(
   language: 'java' | 'csharp',
   code: string,
@@ -245,8 +306,10 @@ async function runPiston(
 /* ---------- Dispatcher ---------- */
 
 export interface RunCodeOptions {
-  /** 사용자 설정 Piston URL (Java/C# 만 사용). 빈 문자열이면 서버 기본값 사용. */
+  /** 사용자 설정 Piston URL (로컬 툴체인이 없을 때의 폴백). */
   pistonUrl?: string
+  /** 로컬 툴체인 시도를 건너뛰고 바로 Piston 사용 */
+  forcePiston?: boolean
 }
 
 export async function runCode(
@@ -261,8 +324,13 @@ export async function runCode(
     case 'python':
       return runPython(code, stdin)
     case 'java':
-    case 'csharp':
+    case 'csharp': {
+      if (!opts.forcePiston) {
+        const local = await tryRunLocal(language, code, stdin)
+        if (local) return local
+      }
       return runPiston(language, code, stdin, opts.pistonUrl ?? '')
+    }
     default: {
       const _exhaustive: never = language
       return {

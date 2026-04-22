@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   BackendUnavailable,
-  checkHealth,
+  fetchHealth,
   fetchAuthStatus,
   logout as logoutRequest,
   startLogin,
+  type HealthInfo,
 } from '../lib/authClient'
 import type { AuthStatus } from '../types'
 
@@ -13,6 +14,7 @@ type BackendState = 'unknown' | 'ok' | 'down'
 export interface UseAuthReturn {
   status: AuthStatus
   backendState: BackendState
+  toolchain: HealthInfo['toolchain'] | null
   refreshing: boolean
   loginBusy: boolean
   error: string | null
@@ -27,6 +29,7 @@ const BACKEND_POLL_MS = 20_000
 export function useAuth(): UseAuthReturn {
   const [status, setStatus] = useState<AuthStatus>({ loggedIn: false })
   const [backendState, setBackendState] = useState<BackendState>('unknown')
+  const [toolchain, setToolchain] = useState<HealthInfo['toolchain'] | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [loginBusy, setLoginBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,8 +37,10 @@ export function useAuth(): UseAuthReturn {
   const pollingLogin = useRef<number | null>(null)
 
   const pingBackend = useCallback(async () => {
-    const ok = await checkHealth()
+    const health = await fetchHealth()
+    const ok = !!health?.ok
     setBackendState(ok ? 'ok' : 'down')
+    if (health?.toolchain) setToolchain(health.toolchain)
     return ok
   }, [])
 
@@ -145,6 +150,7 @@ export function useAuth(): UseAuthReturn {
   return {
     status,
     backendState,
+    toolchain,
     refreshing,
     loginBusy,
     error,

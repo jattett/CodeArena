@@ -35,12 +35,29 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T
 }
 
+export interface HealthInfo {
+  ok: boolean
+  version?: string
+  toolchain?: {
+    java: { available: boolean; path?: string }
+    csharp: { available: boolean; path?: string }
+  }
+}
+
 export async function checkHealth(): Promise<boolean> {
   try {
-    await json<{ ok: boolean }>('/api/health')
+    await json<HealthInfo>('/api/health')
     return true
   } catch {
     return false
+  }
+}
+
+export async function fetchHealth(): Promise<HealthInfo | null> {
+  try {
+    return await json<HealthInfo>('/api/health')
+  } catch {
+    return null
   }
 }
 

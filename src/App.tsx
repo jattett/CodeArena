@@ -298,6 +298,7 @@ export default function App() {
         settings={settings}
         authStatus={auth.status}
         backendOk={auth.backendState !== 'down'}
+        toolchain={auth.toolchain ?? null}
         loginBusy={auth.loginBusy}
         authError={auth.error}
         onClose={() => setSettingsOpen(false)}
