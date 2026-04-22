@@ -1,0 +1,16 @@
+node_modules
+dist
+.vite
+.DS_Store
+*.log
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# 로컬 OAuth 토큰 (절대 커밋 금지)
+.codearena/
+auth.json
+
+# IDE / OS
+.idea/
+.vscode/
