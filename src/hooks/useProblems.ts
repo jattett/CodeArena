@@ -2,14 +2,22 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PROBLEMS as BUILTIN } from '../data/problems'
 import type { Problem } from '../types'
 
-const STORAGE_KEY = 'codearena.problems.generated.v1'
+// v2: 프로그래머스 스타일 함수형 스키마로 전환 — 기존 stdin 기반 문제는 자동 폐기.
+const STORAGE_KEY = 'codearena.problems.generated.v2'
+const LEGACY_STORAGE_KEYS = ['codearena.problems.generated.v1']
 
 function loadGenerated(): Problem[] {
+  // 예전 버전 제거 — 더 이상 사용하지 않는 stdin 기반 데이터.
+  for (const k of LEGACY_STORAGE_KEYS) {
+    try { localStorage.removeItem(k) } catch { /* noop */ }
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw) as Problem[]
-    return Array.isArray(parsed) ? parsed : []
+    if (!Array.isArray(parsed)) return []
+    // 방어적 검증: signature 가 없는 항목은 이상하므로 제거.
+    return parsed.filter((p) => p && typeof p === 'object' && !!p.signature)
   } catch {
     return []
   }

@@ -1,19 +1,20 @@
 import { useState, useCallback } from 'react'
-import { runCode, normalizeOutput } from '../lib/executor'
+import { runSolution } from '../lib/executor'
+import { deepEqual, formatCall, formatValue } from '../lib/signatures'
 import type {
   CaseResult,
-  ExecutionResult,
+  FunctionSignature,
+  FunctionTestCase,
   Language,
   RunSummary,
-  TestCase,
 } from '../types'
 
 export interface RunArgs {
   language: Language
   code: string
-  tests: TestCase[]
+  tests: FunctionTestCase[]
+  signature: FunctionSignature
   label?: string
-  /** Java/C# Piston 엔드포인트 override (선택) */
   pistonUrl?: string
 }
 
@@ -37,6 +38,7 @@ export function useRunner(): UseRunnerReturn {
       language,
       code,
       tests,
+      signature,
       label = '예제',
       pistonUrl,
     }: RunArgs): Promise<RunSummary> => {
@@ -46,9 +48,9 @@ export function useRunner(): UseRunnerReturn {
 
       const initial: CaseResult[] = tests.map((t) => ({
         name: t.name,
-        stdin: t.stdin,
-        expected: t.expected,
-        actual: '',
+        argsDisplay: formatCall(signature, t.args),
+        expectedDisplay: formatValue(t.expected),
+        actualDisplay: '',
         stderr: '',
         timeMs: 0,
         status: 'running',
@@ -60,30 +62,41 @@ export function useRunner(): UseRunnerReturn {
 
       for (let i = 0; i < tests.length; i++) {
         const t = tests[i]
-        let res: ExecutionResult
+        let actualValue: unknown = undefined
+        let stderrStr = ''
+        let timeMs = 0
+        let status: CaseResult['status']
+
         try {
-          res = await runCode(language, code, t.stdin, { pistonUrl })
+          const res = await runSolution(language, code, t.args, signature, { pistonUrl })
+          stderrStr = res.stderr || ''
+          timeMs = res.timeMs || 0
+          if (res.timedOut) {
+            status = 'error'
+            stderrStr = stderrStr || `실행 시간 초과`
+          } else if (!res.hasReturn) {
+            status = 'error'
+            if (!stderrStr) {
+              stderrStr = `반환값을 찾을 수 없습니다. ${signature.functionName}() 함수가 올바르게 정의되어 있는지, 값을 return 했는지 확인하세요.`
+            }
+          } else {
+            actualValue = res.returnValue
+            status = deepEqual(actualValue, t.expected) ? 'pass' : 'fail'
+          }
+          lastStdout = res.userStdout || res.stdout || res.stderr || ''
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
-          res = { stdout: '', stderr: msg, timeMs: 0, timedOut: false }
+          stderrStr = msg
+          status = 'error'
         }
-
-        const actual = normalizeOutput(res.stdout)
-        const expected = normalizeOutput(t.expected)
-        let status: CaseResult['status']
-        if (res.stderr && !actual) status = 'error'
-        else if (actual === expected) status = 'pass'
-        else status = 'fail'
-
-        lastStdout = res.stdout || res.stderr || ''
 
         finalResults[i] = {
           name: t.name,
-          stdin: t.stdin,
-          expected: t.expected,
-          actual: res.stdout || '',
-          stderr: res.stderr || '',
-          timeMs: res.timeMs || 0,
+          argsDisplay: formatCall(signature, t.args),
+          expectedDisplay: formatValue(t.expected),
+          actualDisplay: status === 'error' ? '(오류)' : formatValue(actualValue),
+          stderr: stderrStr,
+          timeMs,
           status,
         }
         setResults([...finalResults])

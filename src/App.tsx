@@ -16,7 +16,8 @@ import { OpenAIError } from './lib/openai'
 import type { GenerateRequest, Language } from './types'
 import './styles/app.css'
 
-const STORAGE_CODES = 'codearena.codes.v1'
+// v2: 스켈레톤이 함수 스타일로 변경되었으므로 저장된 사용자 코드도 초기화.
+const STORAGE_CODES = 'codearena.codes.v2'
 
 type CodeMap = Record<string, string>
 
@@ -149,7 +150,8 @@ export default function App() {
     const summary = await runner.run({
       language,
       code,
-      tests: problem.sampleTests,
+      tests: problem.samples,
+      signature: problem.signature,
       label: '예제',
       pistonUrl: settings.pistonUrl,
     })
@@ -158,11 +160,12 @@ export default function App() {
 
   const handleSubmit = async () => {
     if (!problem) return
-    const allTests = [...problem.sampleTests, ...problem.hiddenTests]
+    const allTests = [...problem.samples, ...problem.hidden]
     const summary = await runner.run({
       language,
       code,
       tests: allTests,
+      signature: problem.signature,
       label: '전체',
       pistonUrl: settings.pistonUrl,
     })
@@ -275,7 +278,7 @@ export default function App() {
           }}
         />
         <section className="content">
-          <ProblemPanel problem={problem} />
+          <ProblemPanel problem={problem} language={language} />
           <EditorPanel
             code={code}
             onCodeChange={handleCodeChange}

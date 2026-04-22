@@ -1,54 +1,32 @@
-import type { Language, StarterCodes } from '../types'
+import type { FunctionSignature, Language, StarterCodes } from '../types'
+import { buildSkeleton } from './signatures'
 
 /**
- * 언어별 기본 스켈레톤 코드.
- * 정답은 없고 stdin 읽기 + TODO 주석만 포함합니다.
- * "답 보기" 버튼을 누르기 전까지 사용자가 보게 되는 초기 코드입니다.
+ * signature 기반 — 프로그래머스 스타일의 "빈 함수 하나"만 담긴 스켈레톤을 4 언어에 대해 생성합니다.
  */
-const DEFAULT_SKELETON: StarterCodes = {
-  javascript: `// input 변수에 stdin 전체가 문자열로 들어옵니다.
-// 예: const tokens = input.trim().split(/\\s+/);
-
-// TODO: 여기에 풀이를 작성하세요.
-
-console.log('');
-`,
-  python: `import sys
-
-data = sys.stdin.read().split()
-# TODO: data 를 파싱해서 풀이를 작성하세요.
-
-print('')
-`,
-  java: `import java.util.*;
-import java.io.*;
-
-public class Main {
-    public static void main(String[] args) throws Exception {
-        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
-        // TODO: 입력을 읽고 풀이를 작성하세요.
-
-        System.out.println("");
-    }
+export function skeletonFromSignature(sig: FunctionSignature): StarterCodes {
+  return {
+    javascript: buildSkeleton(sig, 'javascript'),
+    python: buildSkeleton(sig, 'python'),
+    java: buildSkeleton(sig, 'java'),
+    csharp: buildSkeleton(sig, 'csharp'),
+  }
 }
-`,
-  csharp: `using System;
 
-class Program {
-    static void Main() {
-        string input = Console.In.ReadToEnd();
-        // TODO: input 을 파싱해서 풀이를 작성하세요.
-
-        Console.WriteLine("");
-    }
-}
-`,
+/** 기본 시그니처: solution(a, b) -> int — AI 생성 실패 / 폴백 용. */
+export const FALLBACK_SIGNATURE: FunctionSignature = {
+  functionName: 'solution',
+  params: [
+    { name: 'a', type: 'int' },
+    { name: 'b', type: 'int' },
+  ],
+  returnType: 'int',
 }
 
 export function defaultSkeleton(lang: Language): string {
-  return DEFAULT_SKELETON[lang]
+  return buildSkeleton(FALLBACK_SIGNATURE, lang)
 }
 
 export function defaultSkeletonAll(): StarterCodes {
-  return { ...DEFAULT_SKELETON }
+  return skeletonFromSignature(FALLBACK_SIGNATURE)
 }

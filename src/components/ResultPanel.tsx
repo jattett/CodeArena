@@ -41,17 +41,17 @@ function TestCaseRow({ result, index, openIdx, setOpenIdx }: TestCaseRowProps) {
       </div>
       <div className="tc-body">
         <div className="diff-row">
-          <span className="lbl">입력</span>
-          <pre>{result.stdin || '(없음)'}</pre>
+          <span className="lbl">호출</span>
+          <pre>{result.argsDisplay || '(없음)'}</pre>
         </div>
         <div className="diff-row">
-          <span className="lbl">기대</span>
-          <pre>{result.expected}</pre>
+          <span className="lbl">기대 return</span>
+          <pre>{result.expectedDisplay}</pre>
         </div>
         <div className="diff-row">
-          <span className="lbl">실제</span>
-          <pre className={result.status === 'fail' ? 'err' : ''}>
-            {result.actual || '(출력 없음)'}
+          <span className="lbl">실제 return</span>
+          <pre className={result.status === 'fail' || result.status === 'error' ? 'err' : ''}>
+            {result.actualDisplay || '(출력 없음)'}
           </pre>
         </div>
         {result.stderr && (

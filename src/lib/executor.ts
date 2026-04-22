@@ -1,14 +1,17 @@
-import type { ExecutionResult, Language } from '../types'
+import type { ExecutionResult, FunctionSignature, Language } from '../types'
+import { encodeArgsToStdin, extractResult, wrapForExecution } from './signatures'
 
 /**
- * 언어별 코드 실행기
- * 모든 실행기는 ExecutionResult { stdout, stderr, timeMs, timedOut } 를 반환합니다.
+ * 코드 실행기 — 프로그래머스 스타일 함수 실행에 최적화.
+ *
+ * 공개 API:
+ *   runRaw(lang, code, stdin, opts)          — 원시 실행 (stdout/stderr 만 반환)
+ *   runSolution(lang, userCode, args, sig)   — 사용자 코드(함수 하나)를 래퍼로 감싸 실행하고
+ *                                              JSON 으로 직렬화된 반환값까지 파싱해 리턴
  *
  * - JavaScript: Web Worker 샌드박스
- * - Python: Pyodide (브라우저 내 Python 런타임)
- * - Java / C#: 로컬 Express 백엔드가 순서대로 시도
- *     1) /api/run/local  — 시스템에 설치된 javac/java/dotnet 직접 실행 (권장)
- *     2) /api/run/piston — 사용자 지정 Piston 인스턴스 (polling fallback)
+ * - Python:     Pyodide
+ * - Java/C#:    로컬 백엔드 /api/run/local (툴체인 없으면 Piston 폴백)
  */
 
 const LOCAL_RUN_PATH = '/api/run/local'
@@ -23,23 +26,15 @@ const PISTON_LANG: Record<'java' | 'csharp', string> = {
   csharp: 'csharp',
 }
 
-/* ---------- JavaScript (Web Worker) ---------- */
+/* ============================================================ *
+ *  JavaScript  (Web Worker)
+ * ============================================================ */
 
 /**
- * Web Worker 안에서 실행되는 JavaScript 코드.
- *
- * 기본 관례:
- *   - 전역 'input' 문자열 변수로 stdin 전체가 주입됩니다.
- *   - console.log 로 출력합니다.
- *
- * Node.js 호환 셰임:
- *   코딩 테스트 사이트(백준/프로그래머스 등)의 관용 문법이 그대로 동작하도록
- *   다음 API 를 흉내냅니다. (실제 Node.js 와 완전히 동일하지는 않음)
- *     - require('fs').readFileSync(0, 'utf8') / '/dev/stdin' / '/dev/fd/0'
- *     - require('readline').createInterface({...}) — 'line' / 'close' 이벤트
- *     - process.stdin.on('data' | 'end' | 'close', cb)
- *     - process.stdout.write(s) / process.stderr.write(s)
- *     - process.argv / process.env / process.exit()
+ * Web Worker 안에서 돌아가는 JS 실행 본체.
+ * - 전역 'input' 으로 stdin 전체가 전달됨
+ * - process.stdout.write / process.stderr.write 만 간단히 지원 (함수 래퍼가 사용)
+ * - require('fs').readFileSync(0,'utf8') 등 전통적 Node 관용구도 동작하도록 얕은 셰임 유지
  */
 const JS_WORKER_SRC = `
 self.onmessage = async (e) => {
@@ -62,37 +57,8 @@ self.onmessage = async (e) => {
     setDefaultEncoding: () => {},
   });
 
-  const makeStdin = () => {
-    const listeners = { data: [], end: [], close: [] };
-    let fired = false;
-    const fire = () => {
-      if (fired) return;
-      fired = true;
-      queueMicrotask(() => {
-        listeners.data.forEach(cb => cb(stdin));
-        listeners.end.forEach(cb => cb());
-        listeners.close.forEach(cb => cb());
-      });
-    };
-    const api = {
-      isTTY: false,
-      setEncoding: () => api,
-      resume: () => { fire(); return api; },
-      pause: () => api,
-      read: () => stdin,
-      on: (event, cb) => {
-        if (listeners[event]) listeners[event].push(cb);
-        if (event === 'data') fire();
-        return api;
-      },
-      once: (event, cb) => api.on(event, cb),
-      off: () => api,
-    };
-    return api;
-  };
-
   const processShim = {
-    stdin: makeStdin(),
+    stdin: { isTTY: false, read: () => stdin, on: () => processShim.stdin, once: () => processShim.stdin, resume: () => processShim.stdin, setEncoding: () => processShim.stdin },
     stdout: makeWritable(stdoutBuf),
     stderr: makeWritable(stderrBuf),
     argv: ['node', 'main.js'],
@@ -105,32 +71,21 @@ self.onmessage = async (e) => {
     if (name === 'fs') {
       return {
         readFileSync: (pathOrFd) => {
-          if (pathOrFd === 0 || pathOrFd === '/dev/stdin' || pathOrFd === '/dev/fd/0') {
-            return stdin;
-          }
+          if (pathOrFd === 0 || pathOrFd === '/dev/stdin' || pathOrFd === '/dev/fd/0') return stdin;
           throw new Error("브라우저 샌드박스에서는 파일 시스템 접근이 불가합니다: " + pathOrFd);
-        },
-        readFile: (pathOrFd, _encOrCb, maybeCb) => {
-          const cb = typeof _encOrCb === 'function' ? _encOrCb : maybeCb;
-          queueMicrotask(() => cb(null, stdin));
         },
       };
     }
     if (name === 'readline') {
       return {
         createInterface: () => {
-          const lines = stdin.replace(/\\r\\n/g, '\\n').split('\\n');
-          // 관례적으로 trailing '' 는 제거 (코드상 'line' 이벤트로 빈 줄 받는 문제 방지)
+          const lines = String(stdin).replace(/\\r\\n/g, '\\n').split('\\n');
           if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
           const listeners = { line: [], close: [] };
           const iface = {
-            on: (event, cb) => {
-              if (listeners[event]) listeners[event].push(cb);
-              return iface;
-            },
+            on: (event, cb) => { if (listeners[event]) listeners[event].push(cb); return iface; },
             once: (event, cb) => iface.on(event, cb),
             close: () => listeners.close.forEach(c => c()),
-            question: (_q, cb) => cb(lines.shift() ?? ''),
           };
           queueMicrotask(() => {
             for (const ln of lines) listeners.line.forEach(cb => cb(ln));
@@ -140,7 +95,7 @@ self.onmessage = async (e) => {
         },
       };
     }
-    throw new Error("require('" + name + "') 는 브라우저 샌드박스에서 지원되지 않습니다. 전역 'input' 변수를 사용하세요.");
+    throw new Error("require('" + name + "') 는 브라우저에서 지원되지 않습니다.");
   };
 
   const t0 = performance.now();
@@ -152,7 +107,6 @@ self.onmessage = async (e) => {
     await fn(stdin, processShim, requireShim);
   } catch (err) {
     const msg = err && err.message ? String(err.message) : String(err);
-    // process.exit() 호출은 정상 종료로 간주 — stderr 에 남기지 않음.
     if (!msg.startsWith('__PROCESS_EXIT__:')) {
       errs.push(err && err.stack ? err.stack : String(err));
     }
@@ -162,21 +116,10 @@ self.onmessage = async (e) => {
   console.log = origLog;
   console.error = origErr;
 
-  // console.log 결과와 process.stdout.write 결과를 합친다.
-  // 보통 사용자는 둘 중 한 가지만 쓰므로 단순 연결로 충분.
-  const stdoutStr = [logs.join('\\n'), stdoutBuf.join('')]
-    .filter(s => s.length > 0)
-    .join('');
-  const stderrStr = [errs.join('\\n'), stderrBuf.join('')]
-    .filter(s => s.length > 0)
-    .join('');
+  const stdoutStr = [logs.join('\\n'), stdoutBuf.join('')].filter(s => s.length > 0).join('');
+  const stderrStr = [errs.join('\\n'), stderrBuf.join('')].filter(s => s.length > 0).join('');
 
-  self.postMessage({
-    stdout: stdoutStr,
-    stderr: stderrStr,
-    timeMs: t1 - t0,
-    timedOut: false,
-  });
+  self.postMessage({ stdout: stdoutStr, stderr: stderrStr, timeMs: t1 - t0, timedOut: false });
 };
 `
 
@@ -237,7 +180,9 @@ function runJavaScript(
   })
 }
 
-/* ---------- Python (Pyodide) ---------- */
+/* ============================================================ *
+ *  Python (Pyodide)
+ * ============================================================ */
 
 let pyodidePromise: Promise<PyodideInterface> | null = null
 
@@ -285,7 +230,9 @@ async function runPython(code: string, stdin: string): Promise<ExecutionResult> 
   return { stdout, stderr, timeMs: t1 - t0, timedOut: false }
 }
 
-/* ---------- Piston API (Java, C#) ---------- */
+/* ============================================================ *
+ *  Piston (Java, C#)
+ * ============================================================ */
 
 interface PistonResponse {
   compile?: { stdout: string; stderr: string }
@@ -310,10 +257,6 @@ interface LocalRunError {
   hint?: string
 }
 
-/**
- * 백엔드 로컬 실행 시도. 503 (toolchain 미설치) 이면 null 을 돌려
- * 상위에서 Piston 으로 폴백할 수 있도록 한다.
- */
 async function tryRunLocal(
   language: 'java' | 'csharp',
   code: string,
@@ -328,7 +271,6 @@ async function tryRunLocal(
       body: JSON.stringify({ language, code, stdin, timeoutMs: 8_000 }),
     })
   } catch {
-    // 백엔드 자체가 꺼진 경우 — Piston 폴백도 의미없지만 일단 null 반환
     return null
   }
   if (resp.status === 503) return null
@@ -382,16 +324,13 @@ async function runPiston(
     resp = await fetch(PISTON_PROXY_PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: pistonUrl || undefined,
-        payload,
-      }),
+      body: JSON.stringify({ url: pistonUrl || undefined, payload }),
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return {
       stdout: '',
-      stderr: `네트워크 오류: ${msg}\n(로컬 백엔드(/api/run/piston)에 연결할 수 없습니다. 'npm run dev' 가 실행 중인지 확인하세요.)`,
+      stderr: `네트워크 오류: ${msg}`,
       timeMs: performance.now() - t0,
       timedOut: false,
     }
@@ -408,12 +347,7 @@ async function runPiston(
       body?.error ? `⚠️ ${body.error}` : `Piston 오류 (${resp.status})`,
       body?.hint ? body.hint : '',
     ].filter(Boolean)
-    return {
-      stdout: '',
-      stderr: lines.join('\n\n'),
-      timeMs: t1 - t0,
-      timedOut: false,
-    }
+    return { stdout: '', stderr: lines.join('\n\n'), timeMs: t1 - t0, timedOut: false }
   }
   const data: PistonResponse = await resp.json()
   const compileErr = data.compile?.stderr ?? ''
@@ -427,16 +361,16 @@ async function runPiston(
   }
 }
 
-/* ---------- Dispatcher ---------- */
+/* ============================================================ *
+ *  Dispatcher — 원시 실행
+ * ============================================================ */
 
 export interface RunCodeOptions {
-  /** 사용자 설정 Piston URL (로컬 툴체인이 없을 때의 폴백). */
   pistonUrl?: string
-  /** 로컬 툴체인 시도를 건너뛰고 바로 Piston 사용 */
   forcePiston?: boolean
 }
 
-export async function runCode(
+export async function runRaw(
   language: Language,
   code: string,
   stdin: string,
@@ -467,7 +401,46 @@ export async function runCode(
   }
 }
 
-/* ---------- Helpers ---------- */
+/* ============================================================ *
+ *  Dispatcher — 함수 스타일 실행 (프로그래머스식)
+ * ============================================================ */
+
+export interface SolutionRunResult extends ExecutionResult {
+  /** 파싱된 반환값. 마커를 못 찾았으면 undefined. */
+  returnValue: unknown
+  /** 반환값 마커를 성공적으로 찾아 파싱했는지. */
+  hasReturn: boolean
+  /** 마커를 제거한 나머지 stdout (사용자가 직접 찍은 디버그 출력). */
+  userStdout: string
+}
+
+/**
+ * 사용자 코드를 시그니처에 맞는 래퍼로 감싸서 실행합니다.
+ * 반환값은 stdout 의 마커 (\x1e__RESULT__:JSON:__END__\x1e) 를 통해 복원됩니다.
+ */
+export async function runSolution(
+  language: Language,
+  userCode: string,
+  args: unknown[],
+  signature: FunctionSignature,
+  opts: RunCodeOptions = {},
+): Promise<SolutionRunResult> {
+  const wrapped = wrapForExecution(signature, userCode, language)
+  const stdin = encodeArgsToStdin(args)
+  const raw = await runRaw(language, wrapped, stdin, opts)
+  const { value, found, leftover } = extractResult(raw.stdout)
+  return {
+    ...raw,
+    stdout: raw.stdout,
+    userStdout: leftover,
+    returnValue: value,
+    hasReturn: found,
+  }
+}
+
+/* ============================================================ *
+ *  Helpers
+ * ============================================================ */
 
 export async function preloadRuntime(language: Language): Promise<void> {
   if (language === 'python') {
