@@ -13,6 +13,8 @@ export interface RunArgs {
   code: string
   tests: TestCase[]
   label?: string
+  /** Java/C# Piston 엔드포인트 override (선택) */
+  pistonUrl?: string
 }
 
 export interface UseRunnerReturn {
@@ -31,7 +33,13 @@ export function useRunner(): UseRunnerReturn {
   const [stdoutPreview, setStdoutPreview] = useState('')
 
   const run = useCallback(
-    async ({ language, code, tests, label = '예제' }: RunArgs): Promise<RunSummary> => {
+    async ({
+      language,
+      code,
+      tests,
+      label = '예제',
+      pistonUrl,
+    }: RunArgs): Promise<RunSummary> => {
       setRunning(true)
       setSummary(null)
       setStdoutPreview('')
@@ -54,7 +62,7 @@ export function useRunner(): UseRunnerReturn {
         const t = tests[i]
         let res: ExecutionResult
         try {
-          res = await runCode(language, code, t.stdin)
+          res = await runCode(language, code, t.stdin, { pistonUrl })
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
           res = { stdout: '', stderr: msg, timeMs: 0, timedOut: false }

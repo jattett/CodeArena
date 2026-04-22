@@ -30,6 +30,13 @@ export interface OpenAISettings {
   authMode: AuthMode
   apiKey: string
   model: string
+  /**
+   * Java / C# 실행에 사용할 Piston API URL.
+   * 빈 문자열이면 로컬 백엔드의 기본값 사용.
+   * 예시: http://localhost:2000/api/v2/piston/execute (자체 호스팅)
+   *       https://emkc.org/api/v2/piston/execute (2026-02-15 부터 whitelist only)
+   */
+  pistonUrl: string
 }
 
 export interface AuthStatus {

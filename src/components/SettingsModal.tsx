@@ -40,6 +40,7 @@ export default function SettingsModal({
   const [authMode, setAuthMode] = useState<AuthMode>(settings.authMode)
   const [apiKey, setApiKey] = useState(settings.apiKey)
   const [model, setModel] = useState(settings.model || defaultModelFor(settings.authMode))
+  const [pistonUrl, setPistonUrl] = useState(settings.pistonUrl)
   const [showKey, setShowKey] = useState(false)
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function SettingsModal({
       setAuthMode(settings.authMode)
       setApiKey(settings.apiKey)
       setModel(settings.model || defaultModelFor(settings.authMode))
+      setPistonUrl(settings.pistonUrl)
       setShowKey(false)
     }
   }, [open, settings])
@@ -64,6 +66,7 @@ export default function SettingsModal({
       authMode,
       apiKey: apiKey.trim(),
       model: model.trim() || defaultModelFor(authMode),
+      pistonUrl: pistonUrl.trim(),
     })
     onClose()
   }
@@ -304,6 +307,39 @@ export default function SettingsModal({
             모델만 사용할 수 있습니다.
           </div>
         )}
+      </div>
+
+      <div className="form-row">
+        <label className="form-label">
+          Piston URL <span className="badge-sm">Java / C# 실행</span>
+          <span className="form-hint">
+            emkc.org 공개 API 는 2026-02-15 부터 <b>whitelist 전용</b>으로 변경됐습니다. 자체 호스팅한
+            Piston 엔드포인트를 입력하거나 비워두면 서버 기본값을 사용합니다.
+          </span>
+        </label>
+        <input
+          type="text"
+          className="text-input mono"
+          value={pistonUrl}
+          onChange={(e) => setPistonUrl(e.target.value)}
+          placeholder="http://localhost:2000/api/v2/piston/execute"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <details className="disclosure">
+          <summary>📦 자체 Piston 인스턴스 실행 (Docker)</summary>
+          <pre className="code-block">{`docker run -d --name piston \\
+  -p 2000:2000 \\
+  ghcr.io/engineer-man/piston
+
+# 이후 Piston 내부에 언어 런타임 설치 (Java / C# 예시)
+docker exec piston piston-cli ppman install java
+docker exec piston piston-cli ppman install csharp
+
+# 그런 다음 위 입력창에
+#   http://localhost:2000/api/v2/piston/execute
+# 을 입력하세요.`}</pre>
+        </details>
       </div>
     </Modal>
   )

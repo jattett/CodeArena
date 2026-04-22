@@ -149,6 +149,7 @@ export default function App() {
       code,
       tests: problem.sampleTests,
       label: '예제',
+      pistonUrl: settings.pistonUrl,
     })
     if (summary.kind === 'pass') showToast('예제 통과! 🎉', 'success')
   }
@@ -156,7 +157,13 @@ export default function App() {
   const handleSubmit = async () => {
     if (!problem) return
     const allTests = [...problem.sampleTests, ...problem.hiddenTests]
-    const summary = await runner.run({ language, code, tests: allTests, label: '전체' })
+    const summary = await runner.run({
+      language,
+      code,
+      tests: allTests,
+      label: '전체',
+      pistonUrl: settings.pistonUrl,
+    })
     if (summary.kind === 'pass') showToast('축하합니다! 모든 케이스 통과 ✅', 'success')
     else if (summary.kind === 'fail') showToast('일부 케이스 실패 ❌', 'error')
     else showToast('실행 오류 ⚠️', 'error')

@@ -7,6 +7,7 @@ import {
   handleStatus,
 } from './auth.js'
 import { handleChatProxy } from './proxy.js'
+import { handlePistonRun } from './pistonProxy.js'
 import { CODEX_PROXY_URL, getStatus, startCodexProxy, stopCodexProxy } from './codexProxy.js'
 import { loadTokens } from './tokens.js'
 
@@ -39,6 +40,7 @@ app.get('/auth/callback', handleCallback)
 app.get('/api/auth/status', handleStatus)
 app.post('/api/auth/logout', handleLogout)
 app.post('/api/openai/chat', handleChatProxy)
+app.post('/api/run/piston', handlePistonRun)
 
 const server = app.listen(PORT, async () => {
   const banner = `

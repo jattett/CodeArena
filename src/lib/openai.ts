@@ -22,7 +22,12 @@ export const SUGGESTED_OAUTH_MODELS: string[] = [
   'gpt-5.2',
 ]
 
-const EMPTY: OpenAISettings = { authMode: 'oauth', apiKey: '', model: DEFAULT_OAUTH_MODEL }
+const EMPTY: OpenAISettings = {
+  authMode: 'oauth',
+  apiKey: '',
+  model: DEFAULT_OAUTH_MODEL,
+  pistonUrl: '',
+}
 
 function coerceAuthMode(v: unknown): AuthMode {
   return v === 'apikey' || v === 'oauth' ? v : 'oauth'
@@ -51,6 +56,7 @@ export function loadSettings(): OpenAISettings {
       authMode,
       apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
       model,
+      pistonUrl: typeof parsed.pistonUrl === 'string' ? parsed.pistonUrl : '',
     }
   } catch {
     return { ...EMPTY }

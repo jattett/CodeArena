@@ -6,10 +6,11 @@ import type { ExecutionResult, Language } from '../types'
  *
  * - JavaScript: Web Worker 샌드박스
  * - Python: Pyodide (브라우저 내 Python 런타임)
- * - Java / C#: Piston API (무료 공개 코드 실행 API)
+ * - Java / C#: 로컬 Express 백엔드의 /api/run/piston 프록시 → Piston 인스턴스
+ *   (emkc.org 공개 API 는 2026-02-15 부터 whitelist only. 자체 호스팅 권장.)
  */
 
-const PISTON_URL = 'https://emkc.org/api/v2/piston/execute'
+const PISTON_PROXY_PATH = '/api/run/piston'
 
 const PISTON_VERSIONS: Record<'java' | 'csharp', string> = {
   java: '15.0.2',
@@ -165,12 +166,19 @@ interface PistonResponse {
   run?: { stdout: string; stderr: string; signal: string | null }
 }
 
+interface PistonProxyErrorBody {
+  error?: string
+  hint?: string
+  raw?: string
+}
+
 async function runPiston(
   language: 'java' | 'csharp',
   code: string,
   stdin: string,
+  pistonUrl: string,
 ): Promise<ExecutionResult> {
-  const body = {
+  const payload = {
     language: PISTON_LANG[language],
     version: PISTON_VERSIONS[language],
     files: [
@@ -186,26 +194,38 @@ async function runPiston(
   const t0 = performance.now()
   let resp: Response
   try {
-    resp = await fetch(PISTON_URL, {
+    resp = await fetch(PISTON_PROXY_PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        url: pistonUrl || undefined,
+        payload,
+      }),
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return {
       stdout: '',
-      stderr: `네트워크 오류: ${msg}\n(Piston API(emkc.org)에 연결할 수 없습니다)`,
+      stderr: `네트워크 오류: ${msg}\n(로컬 백엔드(/api/run/piston)에 연결할 수 없습니다. 'npm run dev' 가 실행 중인지 확인하세요.)`,
       timeMs: performance.now() - t0,
       timedOut: false,
     }
   }
   const t1 = performance.now()
   if (!resp.ok) {
-    const text = await resp.text()
+    let body: PistonProxyErrorBody | null = null
+    try {
+      body = (await resp.json()) as PistonProxyErrorBody
+    } catch {
+      body = { error: await resp.text() }
+    }
+    const lines = [
+      body?.error ? `⚠️ ${body.error}` : `Piston 오류 (${resp.status})`,
+      body?.hint ? body.hint : '',
+    ].filter(Boolean)
     return {
       stdout: '',
-      stderr: `Piston API 오류 (${resp.status}): ${text}`,
+      stderr: lines.join('\n\n'),
       timeMs: t1 - t0,
       timedOut: false,
     }
@@ -224,10 +244,16 @@ async function runPiston(
 
 /* ---------- Dispatcher ---------- */
 
+export interface RunCodeOptions {
+  /** 사용자 설정 Piston URL (Java/C# 만 사용). 빈 문자열이면 서버 기본값 사용. */
+  pistonUrl?: string
+}
+
 export async function runCode(
   language: Language,
   code: string,
   stdin: string,
+  opts: RunCodeOptions = {},
 ): Promise<ExecutionResult> {
   switch (language) {
     case 'javascript':
@@ -236,7 +262,7 @@ export async function runCode(
       return runPython(code, stdin)
     case 'java':
     case 'csharp':
-      return runPiston(language, code, stdin)
+      return runPiston(language, code, stdin, opts.pistonUrl ?? '')
     default: {
       const _exhaustive: never = language
       return {
